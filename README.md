@@ -1,7 +1,6 @@
 #  Leveraging Language for Abstraction and Program Search 
 
-This repository is the official implementation of Leveraging Language for Abstraction and Program Search (ICML 2021, Wong et. al 2021). 
-This repository and branch is a static branch designed to reproduce the results in the paper. 
+This repository is the modified version of original repository [DreamCoder](https://github.com/ellisk42/ec/tree/icml_2021_supplement?tab=readme-ov-file)
 
 ## Getting Started -- Dependencies and Requirements
 The following setup has been tested on an Ubuntu 16.04 machine. The codebase is implemented in both Python and OCaml.
