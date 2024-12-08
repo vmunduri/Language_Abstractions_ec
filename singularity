@@ -1,72 +1,140 @@
 Bootstrap: docker
 
-From: ubuntu
-
+From: ubuntu:20.04
 
 %runscript
-	eval `opam config env`
-	if [ $# = 0 ] ; then exec bash; else exec "$@"; fi
-
-
+    source /container/venv/bin/activate
+    eval `opam config env`
+    if [ $# = 0 ]; then exec bash; else exec "$@"; fi
 
 %environment
-
     HOME=/container
     export HOME
-
-    PATH="/usr/local/conda/bin:/container/pypy3.5-6.0.0-linux_x86_64-portable/bin:$PATH"
+    PATH="/container/venv/bin:/container/pypy3/bin:/container/moses/bin:$PATH"
     export PATH
 
-
 %labels
-
-   AUTHOR ellisk@mit.edu
-
+    AUTHOR ellisk@mit.edu
 
 %post
 
-    apt-get update && apt-get -y install python3 git wget opam m4 libcairo2-dev libzmq3-dev swig graphviz
+    # Set noninteractive installation mode
+    export DEBIAN_FRONTEND=noninteractive
 
+    # Update package lists and install base dependencies
+    apt-get update && apt-get -y install \
+        tzdata software-properties-common git wget opam m4 libcairo2-dev libzmq3-dev swig graphviz \
+        build-essential libboost-all-dev libgoogle-perftools-dev zlib1g-dev libbz2-dev
+
+    # Configure timezone explicitly
+    ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+    dpkg-reconfigure --frontend noninteractive tzdata
+
+    # Add the deadsnakes PPA for Python 3.7
+    add-apt-repository ppa:deadsnakes/ppa -y
+    apt-get update
+
+    # Install Python 3.7 and its dependencies
+    apt-get install -y python3.7 python3.7-dev python3.7-venv
+
+    # Manually install python3.7-distutils if unavailable
+    if ! dpkg -l | grep -q python3.7-distutils; then
+        wget http://archive.ubuntu.com/ubuntu/pool/universe/p/python3.7/python3.7-distutils_3.7.17-1~20.04_amd64.deb
+        dpkg -i python3.7-distutils_3.7.17-1~20.04_amd64.deb
+        rm python3.7-distutils_3.7.17-1~20.04_amd64.deb
+    fi
+
+    # Create container directory
     mkdir /container
     chmod 777 /container
     HOME=/container
     export HOME
 
+    # Initialize OPAM and create the switch
     opam init -y --auto-setup --root /container/.opam
     opam update
-    opam switch 4.06.1+flambda
+    opam switch create 4.06.1+flambda
     eval `opam config env`
-    opam install -y  ppx_jane core re2 yojson vg cairo2 camlimages menhir ocaml-protoc zmq utop jbuilder
-    #opam install ocp-indent merlin
+    opam install -y ppx_jane core re2 yojson.1.6.0 vg cairo2 camlimages menhir.20211128 ocaml-protoc zmq utop jbuilder
+
     echo "
-#use "topfind";;
+#use \"topfind\";;
 #thread;;
-#require "core.top";;
-#require "core.syntax";;
+#require \"core.top\";;
+#require \"core.syntax\";;
 open Core
 " >> /container/.ocamlinit
     echo 'eval `opam config env`' >> /container/.bashrc  
 
-    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
-    chmod +x Miniconda3-latest-Linux-x86_64.sh
-    ./Miniconda3-latest-Linux-x86_64.sh -b  -p /usr/local/conda
-    rm ./Miniconda3-latest-Linux-x86_64.sh
-    export PATH="/usr/local/conda/bin:$PATH"
+    # Set up Python virtual environment
+    python3.7 -m venv /container/venv
+    . /container/venv/bin/activate
 
-    conda install -y  numpy dill pyzmq matplotlib scipy protobuf scikit-learn
-    conda install pytorch torchvision -c pytorch
-    pip install dill sexpdata pygame pycairo cairocffi psutil pypng Box2D-kengz graphviz frozendict pathos
+    # Upgrade pip and setuptools in the virtual environment
+    /container/venv/bin/pip install --upgrade pip setuptools
 
-    wget https://bitbucket.org/squeaky/portable-pypy/downloads/pypy3.5-6.0.0-linux_x86_64-portable.tar.bz2
-    tar xjvf pypy3.5-6.0.0-linux_x86_64-portable.tar.bz2
-    rm pypy3.5-6.0.0-linux_x86_64-portable.tar.bz2
-    mv pypy3.5-6.0.0-linux_x86_64-portable /container
-    PATH=/container/pypy3.5-6.0.0-linux_x86_64-portable/bin:$PATH
+    # Install Python dependencies in the virtual environment
+    /container/venv/bin/pip install \
+        Box2D-kengz==2.3.3 \
+        cairocffi==1.0.2 \
+        certifi==2019.3.9 \
+        cffi==1.12.3 \
+        chardet==3.0.4 \
+        colorama==0.4.1 \
+        cycler==0.10.0 \
+        dill==0.2.9 \
+        frozendict==1.2 \
+        graphviz==0.11 \
+        idna==2.8 \
+        joblib==0.13.2 \
+        kiwisolver==1.1.0 \
+        matplotlib==3.1.0 \
+        multiprocess==0.70.7 \
+        nltk==3.4.1 \
+        numpy==1.16.4 \
+        num2words==0.5.12 \
+        pathos==0.2.3 \
+        Pillow==6.0.0 \
+        pox==0.2.5 \
+        ppft==1.6.4.9 \
+        protobuf==3.8.0 \
+        psutil==5.6.2 \
+        pycparser==2.19 \
+        pygame==1.9.6 \
+        pyparsing==2.4.0 \
+        pypng==0.0.19 \
+        python-dateutil==2.8.0 \
+        pytz==2019.1 \
+        pyzmq==18.0.1 \
+        requests==2.22.0 \
+        scikit-learn==0.21.2 \
+        scipy==1.3.0 \
+        sexpdata==0.0.3 \
+        six==1.12.0 \
+        torch==1.1.0 \
+        torchvision==0.3.0 \
+        urllib3==1.25.3
 
+    # Download and extract prebuilt Moses binary for Ubuntu 17.04
+    cd /container
+    wget https://www.statmt.org/moses-release/RELEASE-4.0/binaries/ubuntu-17.04.tgz
+    tar -xvf ubuntu-17.04.tgz
+    mv ubuntu-17.04 /container/moses
+    rm -rf ubuntu-17.04.tgz
+
+    # Create a symlink to ensure moses/bin is directly accessible
+    mkdir -p /container/moses/bin
+    ln -s /container/moses/moses/bin/* /container/moses/bin/
+
+    # Install PyPy (optional)
+    wget https://downloads.python.org/pypy/pypy3.10-v7.3.17-linux64.tar.bz2
+    tar xjvf pypy3.10-v7.3.17-linux64.tar.bz2
+    rm pypy3.10-v7.3.17-linux64.tar.bz2
+    mv pypy3.10-v7.3.17-linux64 /container/pypy3
+
+    PATH=/container/pypy3/bin:$PATH
     pypy3 -m ensurepip
-    pypy3 -m pip install --user vmprof
-    pypy3 -m pip install --user dill
-    pypy3 -m pip install --user psutil
+    pypy3 -m pip install --user vmprof dill psutil
 
-
-
+    # Ensure the virtual environment is in the PATH
+    echo 'export PATH="/container/venv/bin:$PATH"' >> /container/.bashrc
